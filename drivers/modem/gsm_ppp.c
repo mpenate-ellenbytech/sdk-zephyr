@@ -614,31 +614,15 @@ static struct net_if *ppp_net_if(void)
 
 static void set_ppp_carrier_on(struct gsm_modem *gsm)
 {
-	static const struct ppp_api *api;
 	const struct device *ppp_dev = device_get_binding(CONFIG_NET_PPP_DRV_NAME);
 	struct net_if *iface = gsm->iface;
-	int ret;
 
 	if (ppp_dev == NULL) {
 		LOG_ERR("Cannot find PPP %s!", CONFIG_NET_PPP_DRV_NAME);
 		return;
 	}
 
-	if (api == NULL) {
-		api = (const struct ppp_api *)ppp_dev->api;
-
-		/* For the first call, we want to call ppp_start()... */
-		ret = api->start(ppp_dev);
-		if (ret < 0) {
-			LOG_ERR("ppp start returned %d", ret);
-		}
-	} else {
-		/* ...but subsequent calls should be to ppp_enable() */
-		ret = net_if_l2(iface)->enable(iface, true);
-		if (ret < 0) {
-			LOG_ERR("ppp l2 enable returned %d", ret);
-		}
-	}
+	net_if_up(iface);
 }
 
 static void query_rssi(struct gsm_modem *gsm, bool lock)
@@ -1195,7 +1179,7 @@ void gsm_ppp_stop(const struct device *dev)
 
 	/* wait for the interface to be properly down */
 	if (net_if_is_up(iface)) {
-		(void)(net_if_l2(iface)->enable(iface, false));
+		net_if_down(ppp_net_if());
 		(void)k_sem_take(&gsm->sem_if_down, K_FOREVER);
 	}
 
