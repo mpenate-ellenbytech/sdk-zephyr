@@ -969,6 +969,20 @@ Release Notes:
   labels:
     - "area: GPIO"
 
+"Drivers: GNSS":
+  status: maintained
+  maintainers:
+    - bjarki-trackunit
+  files:
+    - doc/hardware/peripherals/gnss.rst
+    - drivers/gnss/
+    - include/zephyr/drivers/gnss.h
+    - include/zephyr/drivers/gnss/
+    - tests/drivers/build_all/gnss/
+    - tests/drivers/gnss/
+  labels:
+    - "area: GNSS"
+
 "Drivers: HW Info":
   status: maintained
   maintainers:
