@@ -16,6 +16,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/util.h>
 #include <stmemsc.h>
+#include <zephyr/drivers/sensor/lsm6dsv16x.h>
 #include "lsm6dsv16x_reg.h"
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(spi)
@@ -26,18 +27,18 @@
 #include <zephyr/drivers/i2c.h>
 #endif /* DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c) */
 
-#define LSM6DSV16X_EN_BIT					0x01
-#define LSM6DSV16X_DIS_BIT					0x00
+#define LSM6DSV16X_EN_BIT  0x01
+#define LSM6DSV16X_DIS_BIT 0x00
 
 /* Accel sensor sensitivity grain is 61 ug/LSB */
-#define GAIN_UNIT_XL				(61LL)
+#define GAIN_UNIT_XL (61LL)
 
 /* Gyro sensor sensitivity grain is 4.375 udps/LSB */
-#define GAIN_UNIT_G				(4375LL)
+#define GAIN_UNIT_G (4375LL)
 
-#define SENSOR_PI_DOUBLE			(SENSOR_PI / 1000000.0)
-#define SENSOR_DEG2RAD_DOUBLE			(SENSOR_PI_DOUBLE / 180)
-#define SENSOR_G_DOUBLE				(SENSOR_G / 1000000.0)
+#define SENSOR_PI_DOUBLE      (SENSOR_PI / 1000000.0)
+#define SENSOR_DEG2RAD_DOUBLE (SENSOR_PI_DOUBLE / 180)
+#define SENSOR_G_DOUBLE       (SENSOR_G / 1000000.0)
 
 struct lsm6dsv16x_config {
 	stmdev_ctx_t ctx;
@@ -56,8 +57,10 @@ struct lsm6dsv16x_config {
 	uint8_t gyro_odr;
 	uint8_t gyro_range;
 	uint8_t drdy_pulsed;
+	uint8_t emb_pulsed;
 #ifdef CONFIG_LSM6DSV16X_TRIGGER
-	const struct gpio_dt_spec gpio_drdy;
+	const struct gpio_dt_spec int1_gpio;
+	const struct gpio_dt_spec int2_gpio;
 	uint8_t drdy_pin;
 	bool trig_enabled;
 #endif /* CONFIG_LSM6DSV16X_TRIGGER */
@@ -70,7 +73,7 @@ union samples {
 	};
 } __aligned(2);
 
-#define LSM6DSV16X_SHUB_MAX_NUM_TARGETS			3
+#define LSM6DSV16X_SHUB_MAX_NUM_TARGETS 3
 
 struct lsm6dsv16x_data {
 	const struct device *dev;
@@ -101,8 +104,15 @@ struct lsm6dsv16x_data {
 	uint8_t gyro_freq;
 	uint8_t gyro_fs;
 
+	uint8_t fsm_program_count;
+	uint16_t fsm_next_program_address;
+
 #ifdef CONFIG_LSM6DSV16X_TRIGGER
+	struct gpio_dt_spec *drdy_gpio;
+	struct gpio_dt_spec *motion_gpio;
+
 	struct gpio_callback gpio_cb;
+	struct gpio_callback gpio_motion_cb;
 	sensor_trigger_handler_t handler_drdy_acc;
 	const struct sensor_trigger *trig_drdy_acc;
 	sensor_trigger_handler_t handler_drdy_gyr;
@@ -110,10 +120,18 @@ struct lsm6dsv16x_data {
 	sensor_trigger_handler_t handler_drdy_temp;
 	const struct sensor_trigger *trig_drdy_temp;
 
+	sensor_trigger_handler_t handler_motion_acc;
+	const struct sensor_trigger *trig_motion_acc;
+	sensor_trigger_handler_t handler_stationary_acc;
+	const struct sensor_trigger *trig_stationary_acc;
+
+	sensor_trigger_handler_t handler_fsm[8];
+	const struct sensor_trigger *trig_fsm[8];
+
 #if defined(CONFIG_LSM6DSV16X_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_LSM6DSV16X_THREAD_STACK_SIZE);
 	struct k_thread thread;
-	struct k_sem gpio_sem;
+	struct k_sem int_sem;
 #elif defined(CONFIG_LSM6DSV16X_TRIGGER_GLOBAL_THREAD)
 	struct k_work work;
 #endif
@@ -125,14 +143,12 @@ int lsm6dsv16x_shub_init(const struct device *dev);
 int lsm6dsv16x_shub_fetch_external_devs(const struct device *dev);
 int lsm6dsv16x_shub_get_idx(const struct device *dev, enum sensor_channel type);
 int lsm6dsv16x_shub_config(const struct device *dev, enum sensor_channel chan,
-			enum sensor_attribute attr,
-			const struct sensor_value *val);
+			   enum sensor_attribute attr, const struct sensor_value *val);
 #endif /* CONFIG_LSM6DSV16X_SENSORHUB */
 
 #ifdef CONFIG_LSM6DSV16X_TRIGGER
-int lsm6dsv16x_trigger_set(const struct device *dev,
-			const struct sensor_trigger *trig,
-			sensor_trigger_handler_t handler);
+int lsm6dsv16x_trigger_set(const struct device *dev, const struct sensor_trigger *trig,
+			   sensor_trigger_handler_t handler);
 
 int lsm6dsv16x_init_interrupt(const struct device *dev);
 #endif
